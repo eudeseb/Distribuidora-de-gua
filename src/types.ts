@@ -3,6 +3,7 @@ export interface Cliente {
   nome: string;
   telefone: string;
   endereco: string;
+  tipoPreferido?: 'dinheiro' | 'fiado' | 'pix' | 'cartao_credito';
   createdAt: number;
 }
 
@@ -18,7 +19,9 @@ export interface Venda {
   clienteId: string;
   clienteNome: string;
   total: number;
-  tipo: 'dinheiro' | 'fiado';
+  tipo: 'dinheiro' | 'fiado' | 'pix' | 'cartao_credito';
+  valorRecebido?: number;
+  troco?: number;
   data: number;
   itens: {
     produtoId: string;
