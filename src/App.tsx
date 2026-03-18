@@ -45,8 +45,14 @@ const Card = ({ children, className }: any) => (
 
 const Dashboard = ({ clientes, produtos, vendas, onPrint, onPrintReceipt }: { clientes: Cliente[], produtos: Produto[], vendas: Venda[], onPrint: () => void, onPrintReceipt: (venda: Venda) => void }) => {
   const totalVendas = vendas.reduce((acc, v) => acc + v.total, 0);
-  const totalFiado = vendas.filter(v => v.tipo === 'fiado').reduce((acc, v) => acc + v.total, 0);
+  const totalFiado = vendas.filter(v => v.tipo === 'fiado').reduce((acc, v) => acc + (v.total - (v.valorRecebido || 0)), 0);
+  const totalRecebido = vendas.reduce((acc, v) => acc + (v.valorRecebido || 0), 0);
   
+  const totalDinheiro = vendas.filter(v => v.tipo === 'dinheiro').reduce((acc, v) => acc + (v.valorRecebido || 0), 0);
+  const totalPix = vendas.filter(v => v.tipo === 'pix').reduce((acc, v) => acc + (v.valorRecebido || 0), 0);
+  const totalCartao = vendas.filter(v => v.tipo === 'cartao_credito').reduce((acc, v) => acc + (v.valorRecebido || 0), 0);
+  const totalRecebidoFiado = vendas.filter(v => v.tipo === 'fiado').reduce((acc, v) => acc + (v.valorRecebido || 0), 0);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-end no-print gap-3">
@@ -58,7 +64,26 @@ const Dashboard = ({ clientes, produtos, vendas, onPrint, onPrintReceipt }: { cl
           <Printer size={20} /> Imprimir / PDF
         </button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-emerald-600 text-white border-none">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-emerald-100 text-sm font-medium">Valor em Caixa</p>
+              <h3 className="text-3xl font-bold mt-1">R$ {totalRecebido.toFixed(2)}</h3>
+              <div className="mt-2 space-y-1">
+                <p className="text-[10px] text-emerald-100/80">Dinheiro: R$ {totalDinheiro.toFixed(2)}</p>
+                <p className="text-[10px] text-emerald-100/80">PIX: R$ {totalPix.toFixed(2)}</p>
+                <p className="text-[10px] text-emerald-100/80">Cartão: R$ {totalCartao.toFixed(2)}</p>
+                {totalRecebidoFiado > 0 && <p className="text-[10px] text-emerald-100/80">Entradas Fiado: R$ {totalRecebidoFiado.toFixed(2)}</p>}
+              </div>
+            </div>
+            <div className="bg-white/20 p-2 rounded-lg">
+              <ShoppingCart size={24} />
+            </div>
+          </div>
+        </Card>
+
         <Card className="bg-blue-600 text-white border-none">
           <div className="flex justify-between items-start">
             <div>
@@ -371,13 +396,15 @@ const VendasView = ({ clientes, produtos, onAdd }: { clientes: Cliente[], produt
       };
     });
 
+    const valorPago = parseFloat(valorRecebido) || 0;
+
     onAdd({
       clienteId,
       clienteNome: cliente?.nome || 'Desconhecido',
       total,
       tipo,
-      valorRecebido: tipo === 'dinheiro' ? parseFloat(valorRecebido) : undefined,
-      troco: tipo === 'dinheiro' ? troco : undefined,
+      valorRecebido: valorPago,
+      troco: tipo === 'dinheiro' ? troco : 0,
       itens: vendaItens
     });
 
@@ -508,32 +535,38 @@ const VendasView = ({ clientes, produtos, onAdd }: { clientes: Cliente[], produt
               </div>
             </div>
 
-            {tipo === 'dinheiro' && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="space-y-3 pt-2"
-              >
-                <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Valor Recebido</label>
-                  <input 
-                    type="number"
-                    className="input-field"
-                    placeholder="R$ 0,00"
-                    value={valorRecebido}
-                    onChange={(e) => setValorRecebido(e.target.value)}
-                  />
-                </div>
-                {parseFloat(valorRecebido) > 0 && (
-                  <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-blue-600">Troco:</span>
-                      <span className="text-lg font-bold text-blue-700">R$ {troco.toFixed(2)}</span>
-                    </div>
+            <div className="space-y-3 pt-2">
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">
+                  {tipo === 'fiado' ? 'Valor Pago Agora (Opcional)' : 'Valor Recebido'}
+                </label>
+                <input 
+                  type="number"
+                  className="input-field"
+                  placeholder={tipo === 'fiado' ? "R$ 0,00" : `R$ ${total.toFixed(2)}`}
+                  value={valorRecebido}
+                  onChange={(e) => setValorRecebido(e.target.value)}
+                />
+              </div>
+              {tipo === 'dinheiro' && parseFloat(valorRecebido) > total && (
+                <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-blue-600">Troco:</span>
+                    <span className="text-lg font-bold text-blue-700">R$ {troco.toFixed(2)}</span>
                   </div>
-                )}
-              </motion.div>
-            )}
+                </div>
+              )}
+              {tipo === 'fiado' && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-amber-600">Valor em Dívida:</span>
+                    <span className="text-lg font-bold text-amber-700">
+                      R$ {(total - (parseFloat(valorRecebido) || 0)).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="pt-6 border-t border-slate-100">
               <div className="flex justify-between items-end mb-6">
@@ -543,7 +576,12 @@ const VendasView = ({ clientes, produtos, onAdd }: { clientes: Cliente[], produt
               
               <button 
                 onClick={handleSubmit}
-                disabled={!clienteId || itens.length === 0 || (tipo === 'dinheiro' && (!valorRecebido || parseFloat(valorRecebido) < total))}
+                disabled={
+                  !clienteId || 
+                  itens.length === 0 || 
+                  (tipo === 'dinheiro' && (!valorRecebido || parseFloat(valorRecebido) < total)) ||
+                  ((tipo === 'pix' || tipo === 'cartao_credito') && valorRecebido !== '' && parseFloat(valorRecebido) !== total)
+                }
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 transition-all active:scale-95 disabled:opacity-50 disabled:shadow-none"
               >
                 Finalizar Venda
@@ -557,14 +595,15 @@ const VendasView = ({ clientes, produtos, onAdd }: { clientes: Cliente[], produt
 };
 
 const FiadosView = ({ vendas, onPagar }: { vendas: Venda[], onPagar: (id: string) => void }) => {
-  const fiados = vendas.filter(v => v.tipo === 'fiado');
+  const fiados = vendas.filter(v => v.tipo === 'fiado' && (v.total - (v.valorRecebido || 0)) > 0);
   
   // Group debts by client
   const dividasPorCliente = fiados.reduce((acc, v) => {
     if (!acc[v.clienteId]) {
       acc[v.clienteId] = { nome: v.clienteNome, total: 0, vendas: [] };
     }
-    acc[v.clienteId].total += v.total;
+    const valorDivida = v.total - (v.valorRecebido || 0);
+    acc[v.clienteId].total += valorDivida;
     acc[v.clienteId].vendas.push(v);
     return acc;
   }, {} as Record<string, { nome: string, total: number, vendas: Venda[] }>);
@@ -586,7 +625,7 @@ const FiadosView = ({ vendas, onPagar }: { vendas: Venda[], onPagar: (id: string
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold">Histórico de Dívidas</h3>
               <div className="bg-amber-100 text-amber-700 px-4 py-1 rounded-full font-bold text-sm">
-                Total Geral: R$ {fiados.reduce((acc, v) => acc + v.total, 0).toFixed(2)}
+                Total Geral: R$ {fiados.reduce((acc, v) => acc + (v.total - (v.valorRecebido || 0)), 0).toFixed(2)}
               </div>
             </div>
 
@@ -603,7 +642,10 @@ const FiadosView = ({ vendas, onPagar }: { vendas: Venda[], onPagar: (id: string
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-xl font-bold text-slate-900">R$ {v.total.toFixed(2)}</p>
+                    <p className="text-xl font-bold text-slate-900">R$ {(v.total - (v.valorRecebido || 0)).toFixed(2)}</p>
+                    {v.valorRecebido && v.valorRecebido > 0 && (
+                      <p className="text-[10px] text-slate-400">Total: R$ {v.total.toFixed(2)} | Pago: R$ {v.valorRecebido.toFixed(2)}</p>
+                    )}
                     <button 
                       onClick={() => onPagar(v.id)}
                       className="text-blue-600 text-xs font-bold hover:underline"
@@ -727,8 +769,14 @@ export default function App() {
       data: Date.now()
     };
     setVendas([...vendas, newVenda]);
-    showToast('Venda realizada com sucesso!');
-    setActiveTab('home');
+    
+    if (v.tipo === 'fiado') {
+      showToast('Venda salva em Fiados!');
+      setActiveTab('fiados');
+    } else {
+      showToast('Venda realizada com sucesso!');
+      setActiveTab('home');
+    }
   };
 
   const marcarVendaComoPaga = (id: string) => {
