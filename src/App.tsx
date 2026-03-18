@@ -11,7 +11,8 @@ import {
   ChevronRight,
   Droplets,
   TrendingUp,
-  Clock
+  Clock,
+  Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -42,12 +43,20 @@ const Card = ({ children, className }: any) => (
 
 // --- Views ---
 
-const Dashboard = ({ clientes, produtos, vendas }: { clientes: Cliente[], produtos: Produto[], vendas: Venda[] }) => {
+const Dashboard = ({ clientes, produtos, vendas, onPrint }: { clientes: Cliente[], produtos: Produto[], vendas: Venda[], onPrint: () => void }) => {
   const totalVendas = vendas.reduce((acc, v) => acc + v.total, 0);
   const totalFiado = vendas.filter(v => v.tipo === 'fiado').reduce((acc, v) => acc + v.total, 0);
   
   return (
     <div className="space-y-6">
+      <div className="flex justify-end no-print">
+        <button 
+          onClick={onPrint}
+          className="btn-primary flex items-center gap-2 bg-slate-800 hover:bg-slate-900"
+        >
+          <Printer size={20} /> Imprimir Relatório
+        </button>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-blue-600 text-white border-none">
           <div className="flex justify-between items-start">
@@ -143,7 +152,7 @@ const Dashboard = ({ clientes, produtos, vendas }: { clientes: Cliente[], produt
   );
 };
 
-const ClientesView = ({ clientes, onAdd }: { clientes: Cliente[], onAdd: (c: Omit<Cliente, 'id' | 'createdAt'>) => void }) => {
+const ClientesView = ({ clientes, onAdd, onDelete }: { clientes: Cliente[], onAdd: (c: Omit<Cliente, 'id' | 'createdAt'>) => void, onDelete: (id: string) => void }) => {
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [endereco, setEndereco] = useState('');
@@ -196,6 +205,7 @@ const ClientesView = ({ clientes, onAdd }: { clientes: Cliente[], onAdd: (c: Omi
                 <th className="pb-3 font-medium">Nome</th>
                 <th className="pb-3 font-medium">Telefone</th>
                 <th className="pb-3 font-medium">Endereço</th>
+                <th className="pb-3 font-medium text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -204,6 +214,15 @@ const ClientesView = ({ clientes, onAdd }: { clientes: Cliente[], onAdd: (c: Omi
                   <td className="py-4 font-medium text-slate-900">{c.nome}</td>
                   <td className="py-4 text-slate-600">{c.telefone || '---'}</td>
                   <td className="py-4 text-slate-600">{c.endereco || '---'}</td>
+                  <td className="py-4 text-right">
+                    <button 
+                      onClick={() => onDelete(c.id)}
+                      className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                      title="Excluir Cliente"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {clientes.length === 0 && (
@@ -527,6 +546,13 @@ export default function App() {
     showToast('Cliente cadastrado com sucesso!');
   };
 
+  const deleteCliente = (id: string) => {
+    if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
+      setClientes(clientes.filter(c => c.id !== id));
+      showToast('Cliente excluído com sucesso!', 'error');
+    }
+  };
+
   const addProduto = (p: Omit<Produto, 'id' | 'createdAt'>) => {
     const newProduto: Produto = {
       ...p,
@@ -548,14 +574,18 @@ export default function App() {
     setActiveTab('home');
   };
 
+  const printReport = () => {
+    window.print();
+  };
+
   const renderContent = () => {
     switch (activeTab) {
-      case 'home': return <Dashboard clientes={clientes} produtos={produtos} vendas={vendas} />;
-      case 'clientes': return <ClientesView clientes={clientes} onAdd={addCliente} />;
+      case 'home': return <Dashboard clientes={clientes} produtos={produtos} vendas={vendas} onPrint={printReport} />;
+      case 'clientes': return <ClientesView clientes={clientes} onAdd={addCliente} onDelete={deleteCliente} />;
       case 'produtos': return <ProdutosView produtos={produtos} onAdd={addProduto} />;
       case 'vendas': return <VendasView clientes={clientes} produtos={produtos} onAdd={addVenda} />;
       case 'fiados': return <FiadosView vendas={vendas} />;
-      default: return <Dashboard clientes={clientes} produtos={produtos} vendas={vendas} />;
+      default: return <Dashboard clientes={clientes} produtos={produtos} vendas={vendas} onPrint={printReport} />;
     }
   };
 
@@ -578,7 +608,7 @@ export default function App() {
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
             <Droplets size={24} />
           </div>
-          <h1 className="font-bold text-xl tracking-tight">Água Pro</h1>
+          <h1 className="font-bold text-xl tracking-tight">Água Aurora</h1>
         </div>
 
         <nav className="flex flex-col gap-2 flex-1">
@@ -632,6 +662,51 @@ export default function App() {
             {renderContent()}
           </motion.div>
         </AnimatePresence>
+
+        {/* Print Only Section */}
+        <div className="print-only p-8">
+          <div className="flex items-center gap-4 mb-8 border-b pb-4">
+            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white">
+              <Droplets size={24} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold">Relatório de Vendas - Água Aurora</h1>
+              <p className="text-slate-500">Gerado em: {new Date().toLocaleString()}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-8 mb-8">
+            <div className="p-4 bg-slate-50 rounded-xl border">
+              <p className="text-sm font-bold text-slate-400 uppercase">Vendas Totais</p>
+              <p className="text-2xl font-bold">R$ {vendas.reduce((acc, v) => acc + v.total, 0).toFixed(2)}</p>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-xl border">
+              <p className="text-sm font-bold text-slate-400 uppercase">Total em Fiado</p>
+              <p className="text-2xl font-bold">R$ {vendas.filter(v => v.tipo === 'fiado').reduce((acc, v) => acc + v.total, 0).toFixed(2)}</p>
+            </div>
+          </div>
+
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b-2 border-slate-200">
+                <th className="py-3 font-bold">Data</th>
+                <th className="py-3 font-bold">Cliente</th>
+                <th className="py-3 font-bold">Tipo</th>
+                <th className="py-3 font-bold text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {vendas.map(v => (
+                <tr key={v.id}>
+                  <td className="py-3">{new Date(v.data).toLocaleDateString()}</td>
+                  <td className="py-3">{v.clienteNome}</td>
+                  <td className="py-3 capitalize">{v.tipo}</td>
+                  <td className="py-3 text-right font-bold">R$ {v.total.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         {/* Toast Notification */}
         <AnimatePresence>
