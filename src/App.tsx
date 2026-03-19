@@ -301,7 +301,7 @@ const ClientesView = ({ clientes, onAdd, onDelete }: { clientes: Cliente[], onAd
   );
 };
 
-const ProdutosView = ({ produtos, onAdd }: { produtos: Produto[], onAdd: (p: Omit<Produto, 'id' | 'createdAt'>) => void }) => {
+const ProdutosView = ({ produtos, onAdd, onDelete }: { produtos: Produto[], onAdd: (p: Omit<Produto, 'id' | 'createdAt'>) => void, onDelete: (id: string) => void }) => {
   const [nome, setNome] = useState('');
   const [preco, setPreco] = useState('');
 
@@ -340,7 +340,14 @@ const ProdutosView = ({ produtos, onAdd }: { produtos: Produto[], onAdd: (p: Omi
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {produtos.map(p => (
-          <Card key={p.id} className="flex flex-col items-center text-center">
+          <Card key={p.id} className="flex flex-col items-center text-center relative group">
+            <button 
+              onClick={() => onDelete(p.id)}
+              className="absolute top-2 right-2 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+              title="Excluir Produto"
+            >
+              <Trash2 size={16} />
+            </button>
             <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
               <Droplets size={32} />
             </div>
@@ -380,7 +387,16 @@ const VendasView = ({ clientes, produtos, onAdd }: { clientes: Cliente[], produt
   };
 
   const total = calculateTotal();
-  const troco = parseFloat(valorRecebido) > total ? parseFloat(valorRecebido) - total : 0;
+  const troco = (parseFloat(valorRecebido) || 0) > total ? (parseFloat(valorRecebido) || 0) - total : 0;
+
+  // Auto-fill valorRecebido for non-cash/fiado types
+  useEffect(() => {
+    if (tipo === 'pix' || tipo === 'cartao_credito') {
+      setValorRecebido(total.toFixed(2));
+    } else if (tipo === 'dinheiro' && valorRecebido === '') {
+      // Don't auto-fill for cash to allow typing received amount
+    }
+  }, [tipo, total]);
 
   const handleSubmit = () => {
     if (!clienteId || itens.length === 0) return;
@@ -397,6 +413,11 @@ const VendasView = ({ clientes, produtos, onAdd }: { clientes: Cliente[], produt
     });
 
     const valorPago = parseFloat(valorRecebido) || 0;
+
+    // Final validation before submitting
+    if (tipo === 'dinheiro' && valorPago < total) return;
+    if ((tipo === 'pix' || tipo === 'cartao_credito') && Math.abs(valorPago - total) > 0.01) return;
+    if (tipo === 'fiado' && valorPago > total) return;
 
     onAdd({
       clienteId,
@@ -536,33 +557,49 @@ const VendasView = ({ clientes, produtos, onAdd }: { clientes: Cliente[], produt
             </div>
 
             <div className="space-y-3 pt-2">
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">
-                  {tipo === 'fiado' ? 'Valor Pago Agora (Opcional)' : 'Valor Recebido'}
-                </label>
-                <input 
-                  type="number"
-                  className="input-field"
-                  placeholder={tipo === 'fiado' ? "R$ 0,00" : `R$ ${total.toFixed(2)}`}
-                  value={valorRecebido}
-                  onChange={(e) => setValorRecebido(e.target.value)}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">
+                    {tipo === 'fiado' ? 'Valor Pago (Entrada)' : 'Valor Recebido'}
+                  </label>
+                  <input 
+                    type="number"
+                    className="input-field"
+                    placeholder={tipo === 'fiado' ? "R$ 0,00" : `R$ ${total.toFixed(2)}`}
+                    value={valorRecebido}
+                    onChange={(e) => setValorRecebido(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSubmit();
+                    }}
+                  />
+                </div>
+                {tipo === 'fiado' && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">
+                      Valor da Dívida (Fiado)
+                    </label>
+                    <input 
+                      type="number"
+                      className="input-field bg-amber-50 border-amber-200 text-amber-700 font-bold"
+                      placeholder="R$ 0,00"
+                      value={(total - (parseFloat(valorRecebido) || 0)).toFixed(2)}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setValorRecebido((total - val).toFixed(2));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSubmit();
+                      }}
+                    />
+                  </div>
+                )}
               </div>
+              
               {tipo === 'dinheiro' && parseFloat(valorRecebido) > total && (
                 <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-blue-600">Troco:</span>
                     <span className="text-lg font-bold text-blue-700">R$ {troco.toFixed(2)}</span>
-                  </div>
-                </div>
-              )}
-              {tipo === 'fiado' && (
-                <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-amber-600">Valor em Dívida:</span>
-                    <span className="text-lg font-bold text-amber-700">
-                      R$ {(total - (parseFloat(valorRecebido) || 0)).toFixed(2)}
-                    </span>
                   </div>
                 </div>
               )}
@@ -579,12 +616,17 @@ const VendasView = ({ clientes, produtos, onAdd }: { clientes: Cliente[], produt
                 disabled={
                   !clienteId || 
                   itens.length === 0 || 
-                  (tipo === 'dinheiro' && (!valorRecebido || parseFloat(valorRecebido) < total)) ||
-                  ((tipo === 'pix' || tipo === 'cartao_credito') && valorRecebido !== '' && parseFloat(valorRecebido) !== total)
+                  (tipo === 'dinheiro' && (parseFloat(valorRecebido) || 0) < total) ||
+                  ((tipo === 'pix' || tipo === 'cartao_credito') && Math.abs((parseFloat(valorRecebido) || 0) - total) > 0.01) ||
+                  (tipo === 'fiado' && (parseFloat(valorRecebido) || 0) > total)
                 }
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 transition-all active:scale-95 disabled:opacity-50 disabled:shadow-none"
+                className={cn(
+                  "w-full font-bold py-4 rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:shadow-none",
+                  tipo === 'fiado' ? "bg-amber-500 hover:bg-amber-600 shadow-amber-100" : "bg-blue-600 hover:bg-blue-700 shadow-blue-200",
+                  "text-white"
+                )}
               >
-                Finalizar Venda
+                {tipo === 'fiado' ? 'Finalizar Venda Fiada' : 'Finalizar Venda'}
               </button>
             </div>
           </div>
@@ -594,7 +636,7 @@ const VendasView = ({ clientes, produtos, onAdd }: { clientes: Cliente[], produt
   );
 };
 
-const FiadosView = ({ vendas, onPagar }: { vendas: Venda[], onPagar: (id: string) => void }) => {
+const FiadosView = ({ vendas, onPagar, onDelete }: { vendas: Venda[], onPagar: (id: string) => void, onDelete: (id: string) => void }) => {
   const fiados = vendas.filter(v => v.tipo === 'fiado' && (v.total - (v.valorRecebido || 0)) > 0);
   
   // Group debts by client
@@ -646,12 +688,21 @@ const FiadosView = ({ vendas, onPagar }: { vendas: Venda[], onPagar: (id: string
                     {v.valorRecebido && v.valorRecebido > 0 && (
                       <p className="text-[10px] text-slate-400">Total: R$ {v.total.toFixed(2)} | Pago: R$ {v.valorRecebido.toFixed(2)}</p>
                     )}
-                    <button 
-                      onClick={() => onPagar(v.id)}
-                      className="text-blue-600 text-xs font-bold hover:underline"
-                    >
-                      Marcar como Pago
-                    </button>
+                    <div className="flex items-center gap-3 justify-end">
+                      <button 
+                        onClick={() => onDelete(v.id)}
+                        className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                        title="Excluir Fiado"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                      <button 
+                        onClick={() => onPagar(v.id)}
+                        className="text-blue-600 text-xs font-bold hover:underline"
+                      >
+                        Marcar como Pago
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -762,6 +813,11 @@ export default function App() {
     showToast('Produto adicionado ao catálogo!');
   };
 
+  const deleteProduto = (id: string) => {
+    setProdutos(produtos.filter(p => p.id !== id));
+    showToast('Produto excluído com sucesso!', 'error');
+  };
+
   const addVenda = (v: Omit<Venda, 'id' | 'data'>) => {
     const newVenda: Venda = {
       ...v,
@@ -782,6 +838,11 @@ export default function App() {
   const marcarVendaComoPaga = (id: string) => {
     setVendas(vendas.map(v => v.id === id ? { ...v, tipo: 'dinheiro' } : v));
     showToast('Dívida marcada como paga!');
+  };
+
+  const deleteVenda = (id: string) => {
+    setVendas(vendas.filter(v => v.id !== id));
+    showToast('Venda removida do histórico!', 'error');
   };
 
   const printReport = () => {
@@ -870,9 +931,9 @@ export default function App() {
     switch (activeTab) {
       case 'home': return <Dashboard clientes={clientes} produtos={produtos} vendas={vendas} onPrint={printReport} onPrintReceipt={printReceipt} />;
       case 'clientes': return <ClientesView clientes={clientes} onAdd={addCliente} onDelete={deleteCliente} />;
-      case 'produtos': return <ProdutosView produtos={produtos} onAdd={addProduto} />;
+      case 'produtos': return <ProdutosView produtos={produtos} onAdd={addProduto} onDelete={deleteProduto} />;
       case 'vendas': return <VendasView clientes={clientes} produtos={produtos} onAdd={addVenda} />;
-      case 'fiados': return <FiadosView vendas={vendas} onPagar={marcarVendaComoPaga} />;
+      case 'fiados': return <FiadosView vendas={vendas} onPagar={marcarVendaComoPaga} onDelete={deleteVenda} />;
       default: return <Dashboard clientes={clientes} produtos={produtos} vendas={vendas} onPrint={printReport} onPrintReceipt={printReceipt} />;
     }
   };
